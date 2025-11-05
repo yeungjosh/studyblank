@@ -146,13 +146,13 @@ Rate your answer (0-5)
 - **Auth**: Firebase Authentication
 - **UI**: Material Design, CardView, RecyclerView
 - **Algorithm**: SM-2 Spaced Repetition
-- **Min SDK**: Android 4.0.3 (API 15)
-- **Target SDK**: Android 8.0 (API 26)
+- **Min SDK**: Android 4.1 (API 16)
+- **Target SDK**: Android 9.0 (API 28)
 
 ### Project Structure
 
 ```
-studyblank/
+studyblank/app/src/main/java/com/example/bao48/studyblank/
 ├── algorithm/                    ← ML Core
 │   └── SpacedRepetitionAlgorithm.java
 ├── database/                     ← Data Layer
@@ -165,15 +165,20 @@ studyblank/
 │   ├── Deck.java
 │   ├── Flashcard.java
 │   └── StudyProgress.java        ← ML State
-├── Activities/                   ← UI Layer
+├── Activities (root package)     ← UI Layer
 │   ├── home.java                 (Login)
 │   ├── createAccount.java        (Register)
 │   ├── MainActivity.java         (Dashboard)
 │   ├── StudyActivity.java        (Study)
 │   └── DeckListActivity.java     (Browse)
-└── res/                          ← Resources
+└── app/src/main/res/             ← Resources
     ├── layout/
+    │   ├── activity_study.xml
+    │   ├── activity_deck_list.xml
+    │   └── content_main.xml
     └── values/
+        ├── strings.xml
+        └── colors.xml
 ```
 
 ### Database Schema
@@ -356,12 +361,13 @@ This project is for educational purposes. Gray's Anatomy content is used for dem
 
 ## 📊 Project Stats
 
-- **Total Code**: ~2,500 lines
+- **Total Code**: ~3,000 lines
 - **Activities**: 5
 - **Database Tables**: 3
 - **Pre-loaded Cards**: 35
 - **Supported Languages**: English
-- **Min Android Version**: 4.0.3 (Ice Cream Sandwich)
+- **Min Android Version**: 4.1 (Jelly Bean)
+- **Target Android Version**: 9.0 (Pie)
 
 ---
 

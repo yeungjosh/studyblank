@@ -14,6 +14,7 @@ import android.widget.TextView;
 import com.example.bao48.studyblank.database.AppDatabase;
 import com.example.bao48.studyblank.models.Deck;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,10 +40,23 @@ public class DeckListActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
 
         // Load decks from database
-        new LoadDecksTask().execute();
+        new LoadDecksTask(this, adapter, database).execute();
     }
 
-    private class LoadDecksTask extends AsyncTask<Void, Void, List<Deck>> {
+    /**
+     * Static inner class with WeakReference to prevent memory leaks
+     */
+    private static class LoadDecksTask extends AsyncTask<Void, Void, List<Deck>> {
+        private final WeakReference<DeckListActivity> activityRef;
+        private final WeakReference<DeckAdapter> adapterRef;
+        private final AppDatabase database;
+
+        LoadDecksTask(DeckListActivity activity, DeckAdapter adapter, AppDatabase database) {
+            this.activityRef = new WeakReference<>(activity);
+            this.adapterRef = new WeakReference<>(adapter);
+            this.database = database;
+        }
+
         @Override
         protected List<Deck> doInBackground(Void... voids) {
             return database.deckDao().getAll();
@@ -50,7 +64,11 @@ public class DeckListActivity extends AppCompatActivity {
 
         @Override
         protected void onPostExecute(List<Deck> decks) {
-            adapter.setDecks(decks);
+            DeckListActivity activity = activityRef.get();
+            DeckAdapter adapter = adapterRef.get();
+            if (activity != null && !activity.isFinishing() && adapter != null) {
+                adapter.setDecks(decks);
+            }
         }
     }
 

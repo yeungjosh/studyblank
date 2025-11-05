@@ -1,5 +1,6 @@
 package com.example.bao48.studyblank;
 
+import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
@@ -15,7 +16,9 @@ import com.example.bao48.studyblank.database.AppDatabase;
 import com.example.bao48.studyblank.models.Flashcard;
 import com.example.bao48.studyblank.models.StudyProgress;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,10 +63,22 @@ public class StudyActivity extends AppCompatActivity {
         btnAgain = findViewById(R.id.btn_again);
 
         database = AppDatabase.getInstance(this);
-        userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
+        // Check if user is logged in
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser == null) {
+            Toast.makeText(this, "User not logged in.", Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        userId = currentUser.getUid();
+
+        // Check if studying a specific deck or all due cards
+        Intent intent = getIntent();
+        int deckId = intent.getIntExtra("DECK_ID", -1);
 
         // Load flashcards due for review
-        new LoadDueCardsTask().execute();
+        new LoadDueCardsTask(this, database, userId, deckId).execute();
 
         // Set up button listeners
         btnShowAnswer.setOnClickListener(new View.OnClickListener() {
@@ -125,8 +140,9 @@ public class StudyActivity extends AppCompatActivity {
      * Rate the current card and move to next using ML algorithm
      */
     private void rateCard(final int quality) {
-        if (currentIndex < flashcards.size()) {
-            new RateCardTask(quality).execute();
+        if (currentIndex < flashcards.size() && currentIndex < progressList.size()) {
+            StudyProgress progress = progressList.get(currentIndex);
+            new RateCardTask(this, database, progress, quality, currentIndex).execute();
         }
     }
 
@@ -174,14 +190,33 @@ public class StudyActivity extends AppCompatActivity {
 
     /**
      * AsyncTask to load cards due for review
+     * Static inner class with WeakReference to prevent memory leaks
      */
-    private class LoadDueCardsTask extends AsyncTask<Void, Void, Void> {
-        @Override
-        protected Void doInBackground(Void... voids) {
-            // Get all cards due for review based on ML algorithm
-            progressList = database.studyProgressDao().getDueCards(userId, System.currentTimeMillis());
+    private static class LoadDueCardsTask extends AsyncTask<Void, Void, LoadDueCardsResult> {
+        private final WeakReference<StudyActivity> activityRef;
+        private final AppDatabase database;
+        private final String userId;
+        private final int deckId;
 
-            flashcards = new ArrayList<>();
+        LoadDueCardsTask(StudyActivity activity, AppDatabase database, String userId, int deckId) {
+            this.activityRef = new WeakReference<>(activity);
+            this.database = database;
+            this.userId = userId;
+            this.deckId = deckId;
+        }
+
+        @Override
+        protected LoadDueCardsResult doInBackground(Void... voids) {
+            List<StudyProgress> progressList;
+
+            // Get cards due for review - either for specific deck or all decks
+            if (deckId != -1) {
+                progressList = database.studyProgressDao().getDueCardsByDeck(userId, deckId, System.currentTimeMillis());
+            } else {
+                progressList = database.studyProgressDao().getDueCards(userId, System.currentTimeMillis());
+            }
+
+            List<Flashcard> flashcards = new ArrayList<>();
             for (StudyProgress progress : progressList) {
                 Flashcard card = database.flashcardDao().getById(progress.getFlashcardId());
                 if (card != null) {
@@ -189,54 +224,80 @@ public class StudyActivity extends AppCompatActivity {
                 }
             }
 
-            return null;
+            return new LoadDueCardsResult(flashcards, progressList);
         }
 
         @Override
-        protected void onPostExecute(Void aVoid) {
-            if (flashcards.isEmpty()) {
-                tvQuestion.setText("No cards due for review! Check back later.");
-                btnShowAnswer.setVisibility(View.GONE);
-            } else {
-                displayCard();
+        protected void onPostExecute(LoadDueCardsResult result) {
+            StudyActivity activity = activityRef.get();
+            if (activity != null && !activity.isFinishing()) {
+                activity.flashcards = result.flashcards;
+                activity.progressList = result.progressList;
+
+                if (result.flashcards.isEmpty()) {
+                    activity.tvQuestion.setText("No cards due for review! Check back later.");
+                    activity.btnShowAnswer.setVisibility(View.GONE);
+                } else {
+                    activity.displayCard();
+                }
             }
         }
     }
 
     /**
-     * AsyncTask to rate card and update ML algorithm
+     * Result holder for LoadDueCardsTask
      */
-    private class RateCardTask extends AsyncTask<Void, Void, String> {
-        private int quality;
+    private static class LoadDueCardsResult {
+        final List<Flashcard> flashcards;
+        final List<StudyProgress> progressList;
 
-        RateCardTask(int quality) {
+        LoadDueCardsResult(List<Flashcard> flashcards, List<StudyProgress> progressList) {
+            this.flashcards = flashcards;
+            this.progressList = progressList;
+        }
+    }
+
+    /**
+     * AsyncTask to rate card and update ML algorithm
+     * Static inner class with WeakReference to prevent memory leaks
+     */
+    private static class RateCardTask extends AsyncTask<Void, Void, String> {
+        private final WeakReference<StudyActivity> activityRef;
+        private final AppDatabase database;
+        private final StudyProgress progress;
+        private final int quality;
+        private final int cardIndex;
+
+        RateCardTask(StudyActivity activity, AppDatabase database, StudyProgress progress, int quality, int cardIndex) {
+            this.activityRef = new WeakReference<>(activity);
+            this.database = database;
+            this.progress = progress;
             this.quality = quality;
+            this.cardIndex = cardIndex;
         }
 
         @Override
         protected String doInBackground(Void... voids) {
-            if (currentIndex < progressList.size()) {
-                StudyProgress progress = progressList.get(currentIndex);
+            // Update progress using ML algorithm
+            StudyProgress updatedProgress = SpacedRepetitionAlgorithm.updateProgress(progress, quality);
+            database.studyProgressDao().update(updatedProgress);
 
-                // Update progress using ML algorithm
-                progress = SpacedRepetitionAlgorithm.updateProgress(progress, quality);
-                database.studyProgressDao().update(progress);
-
-                return SpacedRepetitionAlgorithm.getNextReviewDescription(progress);
-            }
-            return null;
+            return SpacedRepetitionAlgorithm.getNextReviewDescription(updatedProgress);
         }
 
         @Override
         protected void onPostExecute(String nextReview) {
-            if (nextReview != null) {
-                Toast.makeText(StudyActivity.this,
-                        "Next review: " + nextReview,
-                        Toast.LENGTH_SHORT).show();
-            }
+            StudyActivity activity = activityRef.get();
+            if (activity != null && !activity.isFinishing()) {
+                if (nextReview != null) {
+                    Toast.makeText(activity,
+                            "Next review: " + nextReview,
+                            Toast.LENGTH_SHORT).show();
+                }
 
-            currentIndex++;
-            displayCard();
+                activity.currentIndex++;
+                activity.displayCard();
+            }
         }
     }
 }

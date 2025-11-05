@@ -20,6 +20,9 @@ import android.widget.Toast;
 import com.example.bao48.studyblank.database.AppDatabase;
 import com.example.bao48.studyblank.database.DatabaseInitializer;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
+import java.lang.ref.WeakReference;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
@@ -47,15 +50,26 @@ public class MainActivity extends AppCompatActivity
         // Initialize database
         database = AppDatabase.getInstance(this);
 
-        // Initialize sample data if needed
-        new InitializeDatabaseTask().execute();
-
         // Initialize dashboard views
         tvDueCards = findViewById(R.id.tv_due_cards);
         tvTotalCards = findViewById(R.id.tv_total_cards);
 
+        // Check if user is logged in
+        FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+        if (currentUser == null) {
+            // User not logged in, redirect to login
+            Toast.makeText(this, "Please log in", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(this, home.class);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
+        // Initialize sample data if needed
+        new InitializeDatabaseTask(this, database, currentUser.getUid()).execute();
+
         // Load dashboard data
-        new LoadDashboardTask().execute();
+        new LoadDashboardTask(this, database, currentUser.getUid()).execute();
     }
 
     @Override
@@ -128,23 +142,41 @@ public class MainActivity extends AppCompatActivity
 
     /**
      * Initialize database with sample data if empty
+     * Static inner class to prevent memory leaks
      */
-    private class InitializeDatabaseTask extends AsyncTask<Void, Void, Void> {
+    private static class InitializeDatabaseTask extends AsyncTask<Void, Void, Void> {
+        private final AppDatabase database;
+        private final String userId;
+
+        InitializeDatabaseTask(MainActivity activity, AppDatabase database, String userId) {
+            this.database = database;
+            this.userId = userId;
+        }
+
         @Override
         protected Void doInBackground(Void... voids) {
-            DatabaseInitializer.initializeIfEmpty(database,
-                FirebaseAuth.getInstance().getCurrentUser().getUid());
+            DatabaseInitializer.initializeIfEmpty(database, userId);
             return null;
         }
     }
 
     /**
      * Load dashboard statistics
+     * Static inner class with WeakReference to prevent memory leaks
      */
-    private class LoadDashboardTask extends AsyncTask<Void, Void, int[]> {
+    private static class LoadDashboardTask extends AsyncTask<Void, Void, int[]> {
+        private final WeakReference<MainActivity> activityRef;
+        private final AppDatabase database;
+        private final String userId;
+
+        LoadDashboardTask(MainActivity activity, AppDatabase database, String userId) {
+            this.activityRef = new WeakReference<>(activity);
+            this.database = database;
+            this.userId = userId;
+        }
+
         @Override
         protected int[] doInBackground(Void... voids) {
-            String userId = FirebaseAuth.getInstance().getCurrentUser().getUid();
             int dueCards = database.studyProgressDao().getDueCardsCount(userId, System.currentTimeMillis());
             int totalCards = database.flashcardDao().getAll().size();
             return new int[]{dueCards, totalCards};
@@ -152,9 +184,12 @@ public class MainActivity extends AppCompatActivity
 
         @Override
         protected void onPostExecute(int[] results) {
-            if (tvDueCards != null && tvTotalCards != null) {
-                tvDueCards.setText(String.valueOf(results[0]));
-                tvTotalCards.setText(String.valueOf(results[1]));
+            MainActivity activity = activityRef.get();
+            if (activity != null && !activity.isFinishing()) {
+                if (activity.tvDueCards != null && activity.tvTotalCards != null) {
+                    activity.tvDueCards.setText(String.valueOf(results[0]));
+                    activity.tvTotalCards.setText(String.valueOf(results[1]));
+                }
             }
         }
     }
