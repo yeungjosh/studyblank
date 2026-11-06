@@ -6,7 +6,7 @@ StudyBlank is an Android application that uses **machine learning-powered spaced
 
 [![Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com/)
 [![License](https://img.shields.io/badge/License-Educational-blue.svg)]()
-[![Min SDK](https://img.shields.io/badge/Min%20SDK-15-orange.svg)]()
+[![Min SDK](https://img.shields.io/badge/Min%20SDK-16-orange.svg)]()
 
 ## 🌟 Key Features
 
@@ -55,7 +55,7 @@ StudyBlank is an Android application that uses **machine learning-powered spaced
 ### Prerequisites
 - Android Studio Arctic Fox or later
 - JDK 8+
-- Android device/emulator (API 15+)
+- Android device/emulator (API 16+)
 - Firebase account
 
 ### Installation
