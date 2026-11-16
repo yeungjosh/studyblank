@@ -26,7 +26,7 @@ import com.example.bao48.studyblank.models.StudyProgress;
 public class SpacedRepetitionAlgorithm {
 
     private static final double MIN_EASE_FACTOR = 1.3;
-    private static final int MILLISECONDS_PER_DAY = 86400000;
+    private static final long MILLISECONDS_PER_DAY = 86400000L;
 
     /**
      * Update study progress based on user's answer quality
