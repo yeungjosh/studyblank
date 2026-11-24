@@ -6,6 +6,7 @@ import com.example.bao48.studyblank.models.StudyProgress;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** Local unit tests for the SM-2 scheduler. */
@@ -96,5 +97,90 @@ public class SpacedRepetitionAlgorithmTest {
         assertEquals("Medium", SpacedRepetitionAlgorithm.getDifficultyLevel(2.0));
         assertEquals("Hard", SpacedRepetitionAlgorithm.getDifficultyLevel(1.5));
         assertEquals("Very Hard", SpacedRepetitionAlgorithm.getDifficultyLevel(1.3));
+    }
+
+    private static final long HOUR_MS = 3600000L;
+
+    @Test
+    public void newCardIsDueImmediately() {
+        assertTrue(SpacedRepetitionAlgorithm.isDueForReview(fresh()));
+    }
+
+    @Test
+    public void cardWithFutureReviewDateIsNotDue() {
+        StudyProgress p = fresh();
+        p.setNextReviewDate(System.currentTimeMillis() + DAY_MS);
+        assertFalse(SpacedRepetitionAlgorithm.isDueForReview(p));
+        p.setNextReviewDate(System.currentTimeMillis() - HOUR_MS);
+        assertTrue(SpacedRepetitionAlgorithm.isDueForReview(p));
+    }
+
+    @Test
+    public void failedCardIsScheduledWithinMinutesAndBecomesDueSoon() {
+        StudyProgress p = fresh();
+        long before = System.currentTimeMillis();
+        SpacedRepetitionAlgorithm.updateProgress(p, 0);
+        long delay = p.getNextReviewDate() - before;
+        assertTrue(delay >= 10 * 60 * 1000L - 1000);
+        assertTrue(delay < HOUR_MS);
+        assertFalse(SpacedRepetitionAlgorithm.isDueForReview(p));
+    }
+
+    @Test
+    public void priorityGrowsWithOverdueDays() {
+        StudyProgress recent = fresh();
+        recent.setNextReviewDate(System.currentTimeMillis() - DAY_MS);
+        StudyProgress stale = fresh();
+        stale.setNextReviewDate(System.currentTimeMillis() - 10 * DAY_MS);
+        assertTrue(SpacedRepetitionAlgorithm.calculatePriority(stale)
+                > SpacedRepetitionAlgorithm.calculatePriority(recent));
+    }
+
+    @Test
+    public void priorityIsHigherForLowAccuracyAndHardCards() {
+        long due = System.currentTimeMillis() - DAY_MS;
+        StudyProgress good = fresh();
+        good.setNextReviewDate(due);
+        good.setAccuracy(100.0);
+        good.setEaseFactor(2.5);
+        StudyProgress struggling = fresh();
+        struggling.setNextReviewDate(due);
+        struggling.setAccuracy(20.0);
+        struggling.setEaseFactor(1.3);
+        assertTrue(SpacedRepetitionAlgorithm.calculatePriority(struggling)
+                > SpacedRepetitionAlgorithm.calculatePriority(good));
+    }
+
+    @Test
+    public void priorityIsNeverNegative() {
+        StudyProgress p = fresh();
+        p.setNextReviewDate(System.currentTimeMillis() + 365 * DAY_MS);
+        p.setAccuracy(100.0);
+        p.setEaseFactor(3.5);
+        assertEquals(0.0, SpacedRepetitionAlgorithm.calculatePriority(p), 1e-9);
+    }
+
+    @Test
+    public void nextReviewDescriptionForUpcomingCards() {
+        StudyProgress p = fresh();
+        long now = System.currentTimeMillis();
+        p.setNextReviewDate(now + HOUR_MS);
+        assertEquals("today", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
+        p.setNextReviewDate(now + DAY_MS + HOUR_MS);
+        assertEquals("tomorrow", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
+        p.setNextReviewDate(now + 3 * DAY_MS + HOUR_MS);
+        assertEquals("in 3 days", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
+    }
+
+    @Test
+    public void nextReviewDescriptionForOverdueCards() {
+        StudyProgress p = fresh();
+        long now = System.currentTimeMillis();
+        p.setNextReviewDate(now - HOUR_MS);
+        assertEquals("due now", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
+        p.setNextReviewDate(now - DAY_MS - HOUR_MS);
+        assertEquals("overdue by 1 day", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
+        p.setNextReviewDate(now - 4 * DAY_MS - HOUR_MS);
+        assertEquals("overdue by 4 days", SpacedRepetitionAlgorithm.getNextReviewDescription(p));
     }
 }
